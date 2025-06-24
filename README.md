@@ -30,6 +30,8 @@ You can however very well change it to the official protomaps style.json:
 
 ### Demo 2: https://do-me.github.io/maplibre-thumbnails/load_style_from_file.html
 
+![image](https://github.com/user-attachments/assets/d02cd994-49d4-429a-81ff-428bbf149fc2)
+
 ## Limitations 
 
 This method can be used to "print" a map, e.g. for PDF reports. However, note that currently labels are not displayed at all! I'm not sure whether this is currently possible; maybe I misconfigured something. I'm thankful for any insight!
