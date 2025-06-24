@@ -34,9 +34,14 @@ You can however very well change it to the official protomaps style.json:
 
 ## Limitations 
 
-This method can be used to "print" a map, e.g. for PDF reports. However, apparently something changes with protomaps sprites and glyphs so something needs to be adapted to print everything 100% as displayed on the map. 
+This method can be used to "print" a map, e.g. for PDF reports. However, apparently something changed with protomaps sprites and glyphs recently so some small tweaks are required print everything 100% as displayed on the map. 
 
-Meanwhile, you can see this demo for printing a map with geometries "as is". 
+Meanwhile, you can see this demo for printing a map with geometries "as is" using openfreemap with: 
+
+`style: 'https://tiles.openfreemap.org/styles/liberty'`
+
+### Demo 3: https://do-me.github.io/maplibre-thumbnails/simple_print.html
+
 
 
 
