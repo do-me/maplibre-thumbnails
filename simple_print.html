@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Minimal Map-to-PNG Exporter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- MapLibre GL JS Libraries -->
+    <script src='https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #download-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            padding: 10px 15px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #download-btn:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <button id="download-btn">Download PNG</button>
+
+    <script>
+        const geojsonData = {
+            type: 'FeatureCollection',
+            features: [
+                { // A simple polygon (e.g., a park)
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [[
+                            [11.57, 48.14], [11.58, 48.14],
+                            [11.58, 48.135], [11.57, 48.135],
+                            [11.57, 48.14]
+                        ]]
+                    },
+                    properties: { name: 'Sample Park' }
+                },
+                { // A simple line (e.g., a route)
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [
+                            [11.56, 48.13], [11.565, 48.132],
+                            [11.57, 48.13]
+                        ]
+                    },
+                    properties: { name: 'Sample Route' }
+                },
+                { // A single point marker
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [11.575, 48.145]
+                    },
+                    properties: { name: 'Sample Marker' }
+                }
+            ]
+        };
+
+        // 4. Initialize the MapLibre Map
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://tiles.openfreemap.org/styles/liberty',
+            center: [11.576, 48.137], // Initial center (Munich), will be adjusted by fitBounds
+            zoom: 12,
+            // **IMPORTANT**: This is required for map.getCanvas().toDataURL() to work correctly.
+            preserveDrawingBuffer: true 
+        });
+        
+
+        // 5. Add geometries and fit the map view after the map has loaded
+        map.on('load', () => {
+            // Add the GeoJSON data as a new source
+            map.addSource('custom-geometries', {
+                type: 'geojson',
+                data: geojsonData
+            });
+
+            // Add layers to style and display the GeoJSON data
+            map.addLayer({
+                id: 'custom-polygon-fill',
+                type: 'fill',
+                source: 'custom-geometries',
+                filter: ['==', '$type', 'Polygon'],
+                paint: {
+                    'fill-color': '#00b894',
+                    'fill-opacity': 0.5
+                }
+            });
+
+            map.addLayer({
+                id: 'custom-line',
+                type: 'line',
+                source: 'custom-geometries',
+                filter: ['==', '$type', 'LineString'],
+                paint: {
+                    'line-color': '#ff7b54',
+                    'line-width': 4,
+                }
+            });
+
+            // For the marker, we first need to load a custom image
+            const markerSVG = `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"><ellipse cx="12" cy="30" rx="6" ry="2" fill="rgba(0,0,0,0.3)"/><path d="M12 2C7.6 2 4 5.6 4 10c0 6 8 18 8 18s8-12 8-18c0-4.4-3.6-8-8-8z" fill="#e63946" stroke="#fff" stroke-width="1"/><circle cx="12" cy="10" r="3" fill="#fff"/></svg>`;
+            const markerImage = new Image();
+            markerImage.onload = () => {
+                map.addImage('custom-pin-marker', markerImage);
+
+                // Add the marker layer *after* the image has been loaded
+                map.addLayer({
+                    id: 'custom-marker',
+                    type: 'symbol',
+                    source: 'custom-geometries',
+                    filter: ['==', '$type', 'Point'],
+                    layout: {
+                        'icon-image': 'custom-pin-marker',
+                        'icon-size': 1,
+                        'icon-anchor': 'bottom',
+                        'icon-allow-overlap': true
+                    }
+                });
+            };
+            markerImage.src = 'data:image/svg+xml;base64,' + btoa(markerSVG);
+
+            // Calculate the bounding box that contains all our custom features
+            const bounds = new maplibregl.LngLatBounds();
+            geojsonData.features.forEach(feature => {
+                // A helper function to process coordinates from any geometry type
+                const processCoords = (coords) => {
+                    if (typeof coords[0] === 'number') { // It's a single point
+                        bounds.extend(coords);
+                    } else { // It's an array of points or rings
+                        coords.forEach(processCoords);
+                    }
+                };
+                processCoords(feature.geometry.coordinates);
+            });
+
+            // Fit the map to the calculated bounds
+            map.fitBounds(bounds, { padding: 80, duration: 0 }); // padding in pixels
+        });
+
+        // 6. Set up the download button functionality
+        document.getElementById('download-btn').addEventListener('click', () => {
+            // Use the MapLibre canvas to generate a PNG data URL
+            const dataURL = map.getCanvas().toDataURL('image/png');
+
+            // Create a temporary link element to trigger the download
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = 'map_export.png'; // The desired filename for the download
+
+            // Programmatically click the link and then remove it
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+    </script>
+</body>
+</html>
