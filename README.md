@@ -42,6 +42,8 @@ Meanwhile, you can see this demo for printing a map with geometries "as is" usin
 
 ### Demo 3: https://do-me.github.io/maplibre-thumbnails/simple_print.html
 
+This is the actual output you get when clicking the download button (on a wide screen):
+![image](https://github.com/user-attachments/assets/b1be82f3-bc1a-4789-89b1-2904e17c55f0)
 
 
 
