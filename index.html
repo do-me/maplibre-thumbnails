@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Local PMTiles - Auto-Fit Geometry Thumbnails</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>🌍</text></svg>">
+
+    <!-- Libraries -->
+    <script src='https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
+
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f4; }
+        h1 { text-align: center; }
+        #thumbnail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1000px;
+            margin: 20px auto;
+        }
+        .thumbnail-card {
+            border: 1px solid #ccc; padding: 15px; border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); background-color: #ffffff;
+            text-align: center; display: flex; flex-direction: column; align-items: center;
+        }
+        .thumbnail-card h3 { margin-top: 0; margin-bottom: 10px; font-size: 1em; }
+        .map-wrapper {
+            position: relative;
+            width: 150px; 
+            height: 150px;
+        }
+        .map-thumbnail { width: 100%; height: 100%; border-radius: 4px; border: 1px solid #ddd; }
+        
+        .download-link {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            width: 28px;
+            height: 28px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #555;
+            text-decoration: none;
+            z-index: 10;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .download-link:hover {
+            background-color: #fff;
+            color: #000;
+        }
+        .download-link svg {
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Munich Thumbnails with Pmtiles & Auto-Fit Geometry</h1>
+    <div id="thumbnail-grid"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            let protocol = new pmtiles.Protocol();
+            maplibregl.addProtocol("pmtiles", protocol.tile);
+
+            const PMTILES_URL = "/munich.pmtiles"; 
+
+            // Data structure updated with new, visible coordinates for the lines.
+            const locations = [
+                { 
+                    name: "Marienplatz (Marker)",
+                    geometry: { type: 'Point', coordinates: [11.5755, 48.1372] }
+                },
+                { 
+                    name: "Deutsches Museum (Marker)",
+                    geometry: { type: 'Point', coordinates: [11.5839, 48.1302] }
+                },
+                {
+                    name: "Isar River Path",
+                    geometry: {
+                        type: 'LineString',
+                        // FIXED: New coordinates based on the visible area near Deutsches Museum
+                        coordinates: [
+                            [11.5830, 48.1315], [11.5835, 48.1310], [11.5842, 48.1302], 
+                            [11.5850, 48.1295], [11.5855, 48.1288]
+                        ]
+                    }
+                },
+                {
+                    name: "City Ring Road",
+                    geometry: {
+                        type: 'LineString',
+                         // FIXED: New coordinates forming a road around the visible Hofgarten area
+                        coordinates: [
+                            [11.5795, 48.1440], [11.5845, 48.1440], [11.5845, 48.1400], 
+                            [11.5795, 48.1400]
+                        ]
+                    }
+                },
+                {
+                    name: "Theresienwiese (Area)",
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [[
+                            [11.542, 48.138], [11.550, 48.136], [11.551, 48.132], 
+                            [11.543, 48.130], [11.542, 48.138]
+                        ]]
+                    }
+                },
+                {
+                    name: "Hofgarten (Area)",
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [[
+                            [11.580, 48.1435], [11.584, 48.1435], [11.584, 48.1405],
+                            [11.580, 48.1405], [11.580, 48.1435]
+                        ]]
+                    }
+                },
+                { 
+                    name: "Englischer Garten", center: [11.5925, 48.1465], zoom: 14,
+                    geometry: null
+                },
+                { 
+                    name: "Viktualienmarkt", center: [11.5762, 48.1354], zoom: 16,
+                    geometry: null
+                }
+            ];
+
+            function createPinMarkerSVG() {
+                const svg = `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"><ellipse cx="12" cy="30" rx="6" ry="2" fill="rgba(0,0,0,0.3)"/><path d="M12 2C7.6 2 4 5.6 4 10c0 6 8 18 8 18s8-12 8-18c0-4.4-3.6-8-8-8z" fill="#e63946" stroke="#fff" stroke-width="1"/><circle cx="12" cy="10" r="3" fill="#fff"/></svg>`;
+                return 'data:image/svg+xml;base64,' + btoa(svg);
+            }
+
+            // FIXED: More robust helper function to calculate the bounding box of a geometry
+            function calculateBounds(geometry) {
+                if (!geometry) return null;
+
+                let allPoints;
+                const coords = geometry.coordinates;
+                switch (geometry.type) {
+                    case 'Point':
+                        allPoints = [coords];
+                        break;
+                    case 'LineString':
+                        allPoints = coords;
+                        break;
+                    case 'Polygon':
+                        allPoints = coords[0]; // Use the exterior ring for bounds
+                        break;
+                    default:
+                        return null;
+                }
+                
+                if (!allPoints || allPoints.length === 0) return null;
+
+                const initialBounds = [allPoints[0][0], allPoints[0][1], allPoints[0][0], allPoints[0][1]];
+                const bounds = allPoints.reduce((b, point) => [
+                    Math.min(b[0], point[0]), Math.min(b[1], point[1]),
+                    Math.max(b[2], point[0]), Math.max(b[3], point[1])
+                ], initialBounds);
+                
+                if (geometry.type === 'Point') {
+                    const buffer = 0.001; // Increase buffer slightly for better view
+                    bounds[0] -= buffer; bounds[1] -= buffer;
+                    bounds[2] += buffer; bounds[3] += buffer;
+                }
+                return [[bounds[0], bounds[1]], [bounds[2], bounds[3]]];
+            }
+
+
+            function createThumbnail(containerId, location, cardElement) {
+                const style = {
+                    version: 8,
+                    sources: { "protomaps": { type: "vector", url: `pmtiles://${PMTILES_URL}` } },
+                    layers: [
+                        { "id": "background", "type": "background", "paint": { "background-color": "#f0f2f5" } },
+                        { "id": "water", "source": "protomaps", "source-layer": "water", "type": "fill", "paint": { "fill-color": "#aadaff" } },
+                        { "id": "roads", "source": "protomaps", "source-layer": "roads", "type": "line", "paint": { "line-color": "#e0e0e0", "line-width": 1 } },
+                        { "id": "buildings", "source": "protomaps", "source-layer": "buildings", "type": "fill", "paint": { "fill-color": "#cccccc" } }
+                    ]
+                };
+
+                if (location.geometry) {
+                    style.sources['dynamic-geometry'] = { 'type': 'geojson', 'data': { 'type': 'Feature', 'geometry': location.geometry } };
+                    switch(location.geometry.type) {
+                        case 'Point':
+                            style.layers.push({ 'id': 'marker-pin', 'type': 'symbol', 'source': 'dynamic-geometry', 'layout': { 'icon-image': 'pin-marker', 'icon-size': 1, 'icon-anchor': 'bottom', 'icon-allow-overlap': true } });
+                            break;
+                        case 'LineString':
+                            style.layers.push({ 'id': 'route-line', 'type': 'line', 'source': 'dynamic-geometry', 'paint': { 'line-color': '#ff7b54', 'line-width': 3, 'line-opacity': 0.8 } });
+                            break;
+                        case 'Polygon':
+                             style.layers.push({ 'id': 'area-fill', 'type': 'fill', 'source': 'dynamic-geometry', 'paint': { 'fill-color': '#00b894', 'fill-opacity': 0.5 } });
+                             style.layers.push({ 'id': 'area-outline', 'type': 'line', 'source': 'dynamic-geometry', 'paint': { 'line-color': '#00816a', 'line-width': 2 } });
+                            break;
+                    }
+                }
+                
+                const map = new maplibregl.Map({
+                    container: containerId,
+                    style: style,
+                    center: location.center || [0, 0], 
+                    zoom: location.zoom || 1,
+                    interactive: false,
+                    attributionControl: false,
+                    preserveDrawingBuffer: true
+                });
+
+                map.on('load', function() {
+                    if (location.geometry) {
+                        const bounds = calculateBounds(location.geometry);
+                        if (bounds) {
+                            map.fitBounds(bounds, { padding: 40, duration: 0 });
+                        }
+                    }
+                    
+                    if (location.geometry && location.geometry.type === 'Point') {
+                        const pinImage = new Image();
+                        pinImage.onload = () => map.addImage('pin-marker', pinImage);
+                        pinImage.src = createPinMarkerSVG();
+                    }
+                });
+                
+                map.on('idle', function() {
+                    const downloadLink = cardElement.querySelector('.download-link');
+                    downloadLink.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const filename = `${location.name.toLowerCase().replace(/[\s\W]+/g, '_')}_thumbnail.png`;
+                        const dataURL = map.getCanvas().toDataURL('image/png');
+                        const tempLink = document.createElement('a');
+                        tempLink.href = dataURL;
+                        tempLink.download = filename;
+                        document.body.appendChild(tempLink);
+                        tempLink.click();
+                        document.body.removeChild(tempLink);
+                    });
+                });
+            }
+
+            const gridContainer = document.getElementById('thumbnail-grid');
+            locations.forEach((location, index) => {
+                const mapId = `map-thumbnail-${index}`;
+                const card = document.createElement('div');
+                card.className = 'thumbnail-card';
+                card.innerHTML = `
+                    <h3>${location.name}</h3>
+                    <div class="map-wrapper">
+                        <div id="${mapId}" class="map-thumbnail"></div>
+                        <a href="#" class="download-link" title="Download as PNG">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+                        </a>
+                    </div>
+                `;
+                gridContainer.appendChild(card);
+                createThumbnail(mapId, location, card);
+            });
+        });
+    </script>
+</body>
+</html>
