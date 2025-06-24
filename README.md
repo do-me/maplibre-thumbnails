@@ -34,5 +34,9 @@ You can however very well change it to the official protomaps style.json:
 
 ## Limitations 
 
-This method can be used to "print" a map, e.g. for PDF reports. However, note that currently labels are not displayed at all! I'm not sure whether this is currently possible; maybe I misconfigured something. I'm thankful for any insight!
+This method can be used to "print" a map, e.g. for PDF reports. However, apparently something changes with protomaps sprites and glyphs so something needs to be adapted to print everything 100% as displayed on the map. 
+
+Meanwhile, you can see this demo for printing a map with geometries "as is". 
+
+
 
